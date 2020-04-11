@@ -134,3 +134,5 @@ dmypy.json
 
 #Data
 NeuralNetData/
+
+ReAntics/src/my-settings.json

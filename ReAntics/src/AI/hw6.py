@@ -96,6 +96,8 @@ class AIPlayer(Player):
     #Return: The Move to be made
     ##
     def getMove(self, currentState):
+        cloneTest(currentState)
+
         moves = listAllLegalMoves(currentState)
         selectedMove = moves[random.randint(0,len(moves) - 1)];
 
@@ -162,7 +164,7 @@ class AIPlayer(Player):
             else:
                 dist = approxDist(ant.coords, enemyWorkers[0].coords) + 10
                 if len(enemyWorkers) > 1:
-                dist += 10
+                    dist += 10
 
         occupyWin += (dist) + (enemyHill.captureHealth)
 
@@ -220,3 +222,25 @@ class AIPlayer(Player):
     def registerWin(self, hasWon):
         #method templaste, not implemented
         pass
+
+
+# return an object that represents the category of the given ant
+def antCategory(ant):
+    return (ant.UniqueID, ant.coords)
+
+# return an object that represents the category of the given state
+def stateCategory(state):
+    return tuple((antCategory(ant) for inventory in state.inventories for ant in inventory.ants))
+
+
+def cloneTest(state):
+    d = {}
+
+    clone1 = state.fastclone()
+    clone2 = state.fastclone()
+
+    d[stateCategory(clone1)] = 1
+    d[stateCategory(clone2)] = 2
+
+    print(d)
+
