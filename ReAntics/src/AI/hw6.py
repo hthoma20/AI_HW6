@@ -9,7 +9,12 @@ from Ant import UNIT_STATS
 from Move import Move
 from GameState import *
 from AIPlayerUtils import *
+import random
+import pickle
 
+
+ALPHA = 0.1
+GAMMA = 0.9
 
 ##
 #AIPlayer
@@ -31,7 +36,53 @@ class AIPlayer(Player):
     ##
     def __init__(self, inputPlayerId):
         super(AIPlayer,self).__init__(inputPlayerId, "hw6")
-    
+        
+        self.state_utility = {}
+        self.previous_state = None
+         
+
+
+    def if_exploring(self):
+        probability = 0.7
+        rand_val = random.random()
+
+        if rand_val <= probability:
+            return True 
+
+        return False
+
+
+    def get_utility(self, state):
+        if stateCategory(state) not in self.state_utility:
+            self.state_utility[stateCategory(state)] = self.get_reward(state)
+        return self.state_utility[stateCategory(state)]
+
+    def get_reward(self, state):
+        getWin_val = getWinner(state)
+        if getWin_val:
+            print("Won")
+            return 1 
+        if getWin_val == 0:
+            print("Loss")
+            return -1
+        if getWin_val == None:
+            print("..")
+            return -0.01
+
+    def set_utility(self, state, value):
+        self.state_utility[stateCategory(state)] = value
+
+
+    def update_utility(self, currentState):
+        if not self.previous_state == None:
+            
+            updated_utility = self.get_utility(self.previous_state) + ALPHA*(self.get_reward(self.previous_state) + GAMMA*self.get_utility(currentState) - self.get_utility(self.previous_state))
+            
+            self.set_utility(self.previous_state, updated_utility)
+
+        self.previous_state = currentState
+
+
     ##
     #getPlacement
     #
@@ -96,17 +147,24 @@ class AIPlayer(Player):
     #Return: The Move to be made
     ##
     def getMove(self, currentState):
-        cloneTest(currentState)
+        #cloneTest(currentState)
+
+        self.update_utility(currentState)
 
         moves = listAllLegalMoves(currentState)
-        selectedMove = moves[random.randint(0,len(moves) - 1)];
+        
+        move_state_list = []
 
-        #don't do a build move if there are already 3+ ants
-        numAnts = len(currentState.inventories[currentState.whoseTurn].ants)
-        while (selectedMove.moveType == BUILD and numAnts >= 3):
-            selectedMove = moves[random.randint(0,len(moves) - 1)];
-            
+        for move in moves:
+            move_state_list.append((getNextState(currentState, move), move))
+
+        if self.if_exploring():
+            return random.choice(moves)
+        else:
+            return max(move_state_list, key = lambda item: self.get_utility(item[0]))[1]    
+
         return selectedMove
+
 
     def reward(self, currentState):
         myState = currentState.fastclone()
@@ -215,24 +273,28 @@ class AIPlayer(Player):
         return enemyLocations[random.randint(0, len(enemyLocations) - 1)]
 
     ##
-    #registerWin
+    #Win
     #
     # This agent doens't learn
     #
     def registerWin(self, hasWon):
+        file_ptr = open("./dict_dump.txt", "wb")
+        pickle.dump(self.state_utility, file_ptr)
+        file_ptr.close()
         #method templaste, not implemented
-        pass
+        
 
 
 # return an object that represents the category of the given ant
 def antCategory(ant):
     return (ant.UniqueID, ant.coords)
 
+
 # return an object that represents the category of the given state
 def stateCategory(state):
     return tuple((antCategory(ant) for inventory in state.inventories for ant in inventory.ants))
 
-
+'''
 def cloneTest(state):
     d = {}
 
@@ -243,4 +305,4 @@ def cloneTest(state):
     d[stateCategory(clone2)] = 2
 
     print(d)
-
+'''
