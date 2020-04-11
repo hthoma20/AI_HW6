@@ -16,6 +16,8 @@ import pickle
 ALPHA = 0.1
 GAMMA = 0.9
 
+
+
 ##
 #AIPlayer
 #Description: The responsbility of this class is to interact with the game by
@@ -37,16 +39,19 @@ class AIPlayer(Player):
     def __init__(self, inputPlayerId):
         super(AIPlayer,self).__init__(inputPlayerId, "hw6")
         
-        self.state_utility = {}
+        self.state_utility = pickle.load(open("../dict_dump.txt", "rb"))
+
+        self.probability = -1
+        #self.state_utility = {}
         self.previous_state = None
-         
+        self.move_count = 0  
 
 
     def if_exploring(self):
-        probability = 0.7
+        
         rand_val = random.random()
 
-        if rand_val <= probability:
+        if rand_val <= self.probability:
             return True 
 
         return False
@@ -148,6 +153,11 @@ class AIPlayer(Player):
     ##
     def getMove(self, currentState):
         #cloneTest(currentState)
+        
+        if self.move_count > 10000:
+            return None
+        self.move_count += 1    
+
 
         self.update_utility(currentState)
 
@@ -162,7 +172,6 @@ class AIPlayer(Player):
             return random.choice(moves)
         else:
             return max(move_state_list, key = lambda item: self.get_utility(item[0]))[1]    
-
         return selectedMove
 
 
