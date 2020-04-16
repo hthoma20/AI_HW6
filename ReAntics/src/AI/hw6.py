@@ -240,14 +240,9 @@ class AIPlayer(Player):
         
 
 
-# return an object that represents the category of the given ant
-def antCategory(ant):
-    return (ant.UniqueID, ant.coords)
-
-
 # return an object that represents the category of the given state
 def stateCategory(state):
-    return tuple((antCategory(ant) for inventory in state.inventories for ant in inventory.ants))
+    return tuple(ant.coords for ant in state.inventories[state.whoseTurn].ants)
 
 '''
 def cloneTest(state):
