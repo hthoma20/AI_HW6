@@ -13,7 +13,7 @@ import random
 import pickle
 
 
-ALPHA = 0.1
+ALPHA = 1
 GAMMA = 0.9
 
 
@@ -38,20 +38,27 @@ class AIPlayer(Player):
     ##
     def __init__(self, inputPlayerId):
         super(AIPlayer,self).__init__(inputPlayerId, "hw6")
-        
-        self.state_utility = pickle.load(open("../dict_dump.txt", "rb"))
 
-        self.probability = -1
-        #self.state_utility = {}
+        self.use_saved_weights = True
+
+        if self.use_saved_weights:
+            self.state_utility = pickle.load(open("../dict_dump.txt", "rb"))
+        else:
+            self.state_utility = {}
+
+        self.explore_probability = 0
+
         self.previous_state = None
-        self.move_count = 0  
+        self.move_count = 0
+
+        self.current_game_states = []
 
 
     def if_exploring(self):
         
         rand_val = random.random()
 
-        if rand_val <= self.probability:
+        if rand_val <= self.explore_probability:
             return True 
 
         return False
@@ -65,27 +72,46 @@ class AIPlayer(Player):
     def get_reward(self, state):
         getWin_val = getWinner(state)
         if getWin_val:
-            print("Won")
-            return 1 
+            return 1
         if getWin_val == 0:
-            print("Loss")
             return -1
+
         if getWin_val == None:
-            print("..")
-            return -0.01
+            food_reward = getCurrPlayerInventory(state).foodCount * .005
+            return -0.01 + food_reward
 
     def set_utility(self, state, value):
         self.state_utility[stateCategory(state)] = value
 
+    #update the utility of the given "current_state", given the next_state
+    #if there is a winner this state, no current state is needed
+    def update_utility(self, current_state, next_state, won=None):
 
-    def update_utility(self, currentState):
-        if not self.previous_state == None:
-            
-            updated_utility = self.get_utility(self.previous_state) + ALPHA*(self.get_reward(self.previous_state) + GAMMA*self.get_utility(currentState) - self.get_utility(self.previous_state))
-            
-            self.set_utility(self.previous_state, updated_utility)
+        if not current_state == None:
 
-        self.previous_state = currentState
+            if won is None:
+                currUtility = self.get_utility(next_state)
+            else:
+                currUtility = 1 if won else -1
+
+            prevUtility = self.get_utility(current_state)
+            prevReward = self.get_reward(current_state)
+            
+            updated_utility = prevUtility + ALPHA*(prevReward + GAMMA*currUtility - prevUtility)
+            
+            self.set_utility(current_state, updated_utility)
+
+    #udpate the utility of all states seen this game
+    def update_game_utilities(self, hasWon):
+
+        #update the utility of the state right before the end of game
+        self.update_utility(self.current_game_states[-1], None, hasWon)
+
+        #update the utilities of the rest of the states
+        for i in range(len(self.current_game_states)-2, 0, -1):
+            current_state = self.current_game_states[i]
+            next_state = self.current_game_states[i+1]
+            self.update_utility(current_state, next_state)
 
 
     ##
@@ -152,14 +178,14 @@ class AIPlayer(Player):
     #Return: The Move to be made
     ##
     def getMove(self, currentState):
-        #cloneTest(currentState)
-        
+
         if self.move_count > 10000:
             return None
         self.move_count += 1    
 
-
-        self.update_utility(currentState)
+        self.current_game_states.append(currentState)
+        #self.update_utility(self.previous_state, currentState)
+        #self.previous_state = currentState
 
         moves = listAllLegalMoves(currentState)
         
@@ -171,8 +197,7 @@ class AIPlayer(Player):
         if self.if_exploring():
             return random.choice(moves)
         else:
-            return max(move_state_list, key = lambda item: self.get_utility(item[0]))[1]    
-        return selectedMove
+            return max(move_state_list, key = lambda item: self.get_utility(item[0]))[1]
 
 
     def reward(self, currentState):
@@ -287,10 +312,17 @@ class AIPlayer(Player):
     # This agent doens't learn
     #
     def registerWin(self, hasWon):
+        self.move_count = 0
+
+        #self.update_utility(currentState=None, won=hasWon)
+        self.update_game_utilities(hasWon)
+
+        #clear the current game states
+        self.current_game_states = []
+
         file_ptr = open("./dict_dump.txt", "wb")
         pickle.dump(self.state_utility, file_ptr)
         file_ptr.close()
-        #method templaste, not implemented
         
 
 
