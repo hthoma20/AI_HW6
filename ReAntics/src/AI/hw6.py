@@ -41,17 +41,14 @@ class AIPlayer(Player):
     def __init__(self, inputPlayerId):
         super(AIPlayer,self).__init__(inputPlayerId, "hw6")
 
-        self.use_saved_weights = True
-
+        self.use_saved_weights = False
 
         if self.use_saved_weights:
-            self.weight_file = get_current_weight_file()
-            self.state_action_utility = pickle.load(self.weight_file)
+            self.state_action_utility = pickle.load(open("../dict_dump.txt", "rb"))
         else:
             self.state_action_utility = {}
-            weight_path = "weights_dump_{}".format(time.strftime("%Y%m%d-%H%M%S"))
-            self.weight_file = open(weight_path, "wb")
-            set_current_weight_file(weight_path)
+
+        self.results_file = open('./results_{}'.format(time.strftime("%Y%m%d-%H%M%S")), 'w')
 
         self.explore_probability = .7
 
@@ -235,13 +232,15 @@ class AIPlayer(Player):
     def registerWin(self, hasWon):
         self.move_count = 0
 
+        self.results_file.write('{},'.format(hasWon))
+
         #self.update_utility(currentState=None, won=hasWon)
         self.update_game_utilities(hasWon)
 
         #clear the current game states
         self.current_game_states = []
 
-        file_ptr = self.weight_file
+        file_ptr = open("./dict_dump.txt", "wb")
         pickle.dump(self.state_action_utility, file_ptr)
         file_ptr.close()
         
