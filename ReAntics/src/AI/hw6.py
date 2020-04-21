@@ -13,8 +13,8 @@ import random
 import pickle
 
 
-ALPHA = .5
-GAMMA = 0.9
+ALPHA = .6
+GAMMA = 0.8
 
 
 
@@ -46,7 +46,7 @@ class AIPlayer(Player):
         else:
             self.state_action_utility = {}
 
-        self.explore_probability = 0
+        self.explore_probability = .7
 
         self.previous_state = None
         self.previous_move = None
@@ -181,15 +181,19 @@ class AIPlayer(Player):
     #Return: The Move to be made
     ##
     def getMove(self, currentState):
-
         if self.move_count > 10000:
             return None
-        self.move_count += 1    
+        self.move_count += 1
+
+        buildCache(currentState)
 
         #self.update_utility(self.previous_state, currentState)
         #self.previous_state = currentState
 
         moves = listAllLegalMoves(currentState)
+
+        if len(getAntList(currentState, currentState.whoseTurn)) > 3:
+            moves = [move for move in moves if move.moveType != BUILD]
         
         move_state_list = []
 
@@ -220,11 +224,7 @@ class AIPlayer(Player):
         #Attack a random enemy.
         return enemyLocations[random.randint(0, len(enemyLocations) - 1)]
 
-    ##
-    #Win
-    #
-    # This agent doens't learn
-    #
+
     def registerWin(self, hasWon):
         self.move_count = 0
 
@@ -242,7 +242,140 @@ class AIPlayer(Player):
 
 # return an object that represents the category of the given state
 def stateCategory(state):
+
+    return utilityComponents(state, state.whoseTurn)
+
+    workers = getAntList(state, state.whoseTurn, (WORKER,))
+
+    if len(workers) == 0:
+        return (None, None, None)
+
+    food_coords = getCurrPlayerFood(None, state)[0].coords
+    tunnel_coords = getConstrList(state, state.whoseTurn, (TUNNEL,))[0].coords
+
+    worker = workers[0]
+
+    if(worker.carrying):
+        east_steps = tunnel_coords[0] - worker.coords[0]
+        north_steps = tunnel_coords[1] - worker.coords[1]
+    else:
+        east_steps = food_coords[0] - worker.coords[0]
+        north_steps = food_coords[1] - worker.coords[1]
+
+    return (worker.carrying, north_steps, east_steps)
+
     return tuple(ant.coords for ant in state.inventories[state.whoseTurn].ants)
+
+# hold non-changing but relevant values for the utility function
+# in particular, the fastest route between food and tunnel/anthill (deposit)
+class Cache:
+    def __init__(self, state):
+        self.foodCoords = [0]*2
+        self.depositCoords = [0]*2
+        self.rtt = [0]*2
+
+        foods = getConstrList(state, None, (FOOD,))
+        for player in [0,1]:
+            deposits = getConstrList(state, player, (ANTHILL, TUNNEL))
+
+            #find the best combo, based on steps to reach one to the other
+            bestCombo = min([(d, f) for d in deposits for f in foods], key=lambda pair: stepsToReach(state, pair[0].coords, pair[1].coords))
+
+            self.depositCoords[player] = bestCombo[0].coords
+            self.foodCoords[player] = bestCombo[1].coords
+
+            self.rtt[player] = approxDist(self.depositCoords[player], self.foodCoords[player])+1
+
+globalCache = None
+
+def buildCache(state):
+    global globalCache
+
+    if globalCache is None or not cacheValid(state):
+        globalCache = Cache(state)
+
+#check whether the cache still refers to the current game
+def cacheValid(state):
+    allFood = [food.coords for food in getConstrList(state, None, (FOOD,))]
+    allDeposits = [deposit.coords for deposit in getConstrList(state, None, (ANTHILL, TUNNEL))]
+    return all(foodCoord in allFood for foodCoord in globalCache.foodCoords) and \
+           all(depositCoord in allDeposits for depositCoord in globalCache.depositCoords)
+
+# evaluate the utility of a state from a given player's perspective
+# return a tuple of relevant unweighted components
+def utilityComponents(state, perspective):
+    enemy = 1-perspective
+
+    # get lists for ants
+    myWorkers = getAntList(state, perspective, types=(WORKER,))
+    enemyWorkers = getAntList(state, enemy, types=(WORKER,))
+
+    myWarriors = getAntList(state, perspective, types=(DRONE,SOLDIER,R_SOLDIER))
+    enemyWarriors = getAntList(state, enemy, types=(DRONE,SOLDIER,R_SOLDIER))
+
+    myQueen = state.inventories[perspective].getQueen()
+    enemyQueen = state.inventories[enemy].getQueen()
+
+    foodCoords = globalCache.foodCoords[perspective]
+    depositCoords = globalCache.depositCoords[perspective]
+    anthillCoords = state.inventories[perspective].getAnthill().coords
+
+    # it's bad if the queen is on the food
+    queenInTheWayScore = 0
+
+    queenCoords = myQueen.coords
+    if queenCoords in [foodCoords, depositCoords, anthillCoords]:
+        queenInTheWayScore -= 1
+
+    queenHealthScore = myQueen.health
+
+    workerDistScore = 0
+    workerDangerScore = 0
+    for worker in myWorkers:
+
+        # If the worker is carrying food, add the distance to the tunnel to the score
+        if worker.carrying == True:
+            distanceFromTunnel = approxDist(worker.coords, depositCoords)
+            workerDistScore -= distanceFromTunnel
+
+        # if the worker is not carrying food, add the distance from the food and tunnel to the score
+        else:
+            distTunnelFood = approxDist(foodCoords, depositCoords)
+            workerDistScore -= distTunnelFood
+            distanceFromFood = approxDist(worker.coords, foodCoords)
+            workerDistScore -= distanceFromFood
+
+        #its bad to be close to enemy warriors
+        for warrior in enemyWarriors:
+            #warriorRange = UNIT_STATS[warrior.type][RANGE] + UNIT_STATS[warrior.type][MOVEMENT]
+            if approxDist(worker.coords, warrior.coords) < 2:
+                workerDangerScore -= 1
+
+    # Aim to attack workers, if there are no workers, aim to attack queen
+    if len(enemyWorkers) != 0:
+        targetCoords = enemyWorkers[0].coords
+    else:
+        targetCoords = enemyQueen.coords
+
+    warriorDistScore = 0
+    # Add distance from fighter ants to their targets to score, with a preference to move vertically
+    for warrior in myWarriors:
+        warriorDistScore -= (warrior.coords[0] - targetCoords[0])**2
+        warriorDistScore -= (warrior.coords[1] - targetCoords[1])**2
+
+    #do we have an attacker?
+    attackScore = UNIT_STATS[myWarriors[0].type][ATTACK] if len(myWarriors) == 1 else 0
+
+    # punishment for if the enemy has workers
+    enemyWorkerScore = - (len(enemyWorkers) * len(myWarriors))
+
+    # Heavy punishment for not having workers, since workers are needed to win
+    noWorkerScore = -1 if len(myWorkers) == 0 else 0
+
+    foodScore = state.inventories[perspective].foodCount
+
+    return (queenInTheWayScore, workerDistScore, workerDangerScore, warriorDistScore, enemyWorkerScore,
+            noWorkerScore, foodScore, attackScore, queenHealthScore)
 
 '''
 def cloneTest(state):
