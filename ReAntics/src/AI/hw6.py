@@ -41,10 +41,13 @@ class AIPlayer(Player):
 
         self.use_saved_weights = True
 
+
         if self.use_saved_weights:
-            self.state_action_utility = pickle.load(open("../dict_dump.txt", "rb"))
+            self.weight_file = get_current_weight_file()
+            self.state_action_utility = pickle.load(self.weight_file)
         else:
             self.state_action_utility = {}
+            self.weight_file = open("../")
 
         self.explore_probability = .7
 
@@ -320,14 +323,7 @@ def utilityComponents(state, perspective):
     depositCoords = globalCache.depositCoords[perspective]
     anthillCoords = state.inventories[perspective].getAnthill().coords
 
-    # it's bad if the queen is on the food
-    queenInTheWayScore = 0
-
-    queenCoords = myQueen.coords
-    if queenCoords in [foodCoords, depositCoords, anthillCoords]:
-        queenInTheWayScore -= 1
-
-    queenHealthScore = myQueen.health
+    queenHealthScore = 0 if myQueen is None else myQueen.health
 
     workerDistScore = 0
     workerDangerScore = 0
@@ -354,8 +350,10 @@ def utilityComponents(state, perspective):
     # Aim to attack workers, if there are no workers, aim to attack queen
     if len(enemyWorkers) != 0:
         targetCoords = enemyWorkers[0].coords
-    else:
+    elif enemyQueen is not None:
         targetCoords = enemyQueen.coords
+    else:
+        targetCoords = (9,9)
 
     warriorDistScore = 0
     # Add distance from fighter ants to their targets to score, with a preference to move vertically
@@ -374,8 +372,17 @@ def utilityComponents(state, perspective):
 
     foodScore = state.inventories[perspective].foodCount
 
-    return (queenInTheWayScore, workerDistScore, workerDangerScore, warriorDistScore, enemyWorkerScore,
-            noWorkerScore, foodScore, attackScore, queenHealthScore)
+    return (workerDistScore, foodScore)
+
+def get_current_weight_file():
+    with open('current_weights_file_location.txt', 'r') as file:
+        path = file.read()
+
+    return open(path, 'rb')
+
+def set_current_weight_file(new_path):
+    with open('current_weights_file_location.txt', 'w') as file:
+        file.write(new_path)
 
 '''
 def cloneTest(state):
