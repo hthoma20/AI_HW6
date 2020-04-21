@@ -1,6 +1,8 @@
 import math
 import random
 import sys
+import time
+
 sys.path.append("..")  #so other modules can be found in parent dir
 from Player import *
 from Constants import *
@@ -47,7 +49,9 @@ class AIPlayer(Player):
             self.state_action_utility = pickle.load(self.weight_file)
         else:
             self.state_action_utility = {}
-            self.weight_file = open("../")
+            weight_path = "weights_dump_{}".format(time.strftime("%Y%m%d-%H%M%S"))
+            self.weight_file = open(weight_path, "wb")
+            set_current_weight_file(weight_path)
 
         self.explore_probability = .7
 
@@ -237,7 +241,7 @@ class AIPlayer(Player):
         #clear the current game states
         self.current_game_states = []
 
-        file_ptr = open("./dict_dump.txt", "wb")
+        file_ptr = self.weight_file
         pickle.dump(self.state_action_utility, file_ptr)
         file_ptr.close()
         
