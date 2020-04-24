@@ -15,8 +15,8 @@ import random
 import pickle
 
 
-ALPHA = .6
-GAMMA = 0.8
+ALPHA = .5
+GAMMA = 0.9
 
 
 
@@ -41,20 +41,25 @@ class AIPlayer(Player):
     def __init__(self, inputPlayerId):
         super(AIPlayer,self).__init__(inputPlayerId, "hw6")
 
-        self.use_saved_weights = False
+        #whether to do q_learning, or regular old td learning
+        self.q_learning = False
+
+        self.use_saved_weights = True
+        self.update_weights = False
 
         if self.use_saved_weights:
             self.state_action_utility = pickle.load(open("../dict_dump.txt", "rb"))
         else:
             self.state_action_utility = {}
 
-        self.results_file = open('./results_{}'.format(time.strftime("%Y%m%d-%H%M%S")), 'w')
+        self.results_file = open('./results_{}_{}_{}.csv'.format(time.strftime("%Y%m%d-%H%M%S"), ALPHA, GAMMA), 'w')
 
-        self.explore_probability = .7
+        self.explore_probability = .4
 
         self.previous_state = None
         self.previous_move = None
         self.move_count = 0
+        self.game_count = 0
 
         self.current_game_states = []
 
@@ -70,7 +75,11 @@ class AIPlayer(Player):
 
 
     def get_utility(self, state_action):
-        state, action = state_action
+        if self.q_learning:
+            state, action = state_action
+        else:
+            state = state_action
+
         if stateCategory(state) not in self.state_action_utility:
             self.state_action_utility[stateCategory(state)] = self.get_reward(state)
         return self.state_action_utility[stateCategory(state)]
@@ -87,8 +96,14 @@ class AIPlayer(Player):
             return -0.01 + food_reward
 
     def set_utility(self, state_action, value):
-        state, action = state_action
-        self.state_action_utility[(stateCategory(state), action)] = value
+        if self.q_learning:
+            state, action = state_action
+            lookup_val = (stateCategory(state), action)
+        else:
+            lookup_val = stateCategory(state_action)
+
+
+        self.state_action_utility[lookup_val] = value
 
     #update the utility of the given "current_state", given the next_state
     #if there is a winner this state, no current state is needed
@@ -101,8 +116,10 @@ class AIPlayer(Player):
             else:
                 next_utility = 1 if won else -1
 
+            current_state = current_state_action[0] if self.q_learning else current_state_action
+
             curr_utility = self.get_utility(current_state_action)
-            curr_reward = self.get_reward(current_state_action[0])
+            curr_reward = self.get_reward(current_state)
             
             updated_utility = curr_utility + ALPHA*(curr_reward + GAMMA*next_utility - curr_utility)
             
@@ -191,9 +208,6 @@ class AIPlayer(Player):
 
         buildCache(currentState)
 
-        #self.update_utility(self.previous_state, currentState)
-        #self.previous_state = currentState
-
         moves = listAllLegalMoves(currentState)
 
         if len(getAntList(currentState, currentState.whoseTurn)) > 3:
@@ -209,9 +223,17 @@ class AIPlayer(Player):
             move_to_make = random.choice(moves)
         else:
             #select the move that takes you to the state with the highest utility
-            move_to_make = max(move_state_list, key = self.get_utility)[1]
+            if self.q_learning:
+                move_to_make = max(move_state_list, key = self.get_utility)[1]
+            else:
+                move_to_make = max(move_state_list, key = lambda state_action: self.get_utility(state_action[0]))[1]
 
-        self.current_game_states.append((currentState, self.previous_move))
+
+        if self.q_learning:
+            self.current_game_states.append((currentState, self.previous_move))
+        else:
+            self.current_game_states.append(currentState)
+
         self.previous_move = move_to_make
         return move_to_make
     
@@ -231,18 +253,22 @@ class AIPlayer(Player):
 
     def registerWin(self, hasWon):
         self.move_count = 0
+        self.game_count += 1
 
         self.results_file.write('{},'.format(hasWon))
+        if(self.game_count % 10 == 0):
+            self.results_file.write('\n')
 
-        #self.update_utility(currentState=None, won=hasWon)
-        self.update_game_utilities(hasWon)
+        if self.update_weights:
+            self.update_game_utilities(hasWon)
 
         #clear the current game states
         self.current_game_states = []
 
-        file_ptr = open("./dict_dump.txt", "wb")
-        pickle.dump(self.state_action_utility, file_ptr)
-        file_ptr.close()
+        if self.update_weights and self.game_count % 10 == 0:
+            file_ptr = open("./dict_dump.txt", "wb")
+            pickle.dump(self.state_action_utility, file_ptr)
+            file_ptr.close()
         
 
 
@@ -270,7 +296,7 @@ def stateCategory(state):
 
     return (worker.carrying, north_steps, east_steps)
 
-    return tuple(ant.coords for ant in state.inventories[state.whoseTurn].ants)
+    #return tuple(ant.coords for ant in state.inventories[state.whoseTurn].ants)
 
 # hold non-changing but relevant values for the utility function
 # in particular, the fastest route between food and tunnel/anthill (deposit)
