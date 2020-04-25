@@ -1,3 +1,12 @@
+#### AI Homework 6 #####
+
+# Authors: Harry and Ravi
+# Notes:
+# The weights file should be located at src/dict_dump.txt should be placed
+
+
+
+
 import math
 import random
 import sys
@@ -39,13 +48,19 @@ class AIPlayer(Player):
     #   cpy           - whether the player is a copy (when playing itself)
     ##
     def __init__(self, inputPlayerId):
-        super(AIPlayer,self).__init__(inputPlayerId, "hw6")
+        super(AIPlayer,self).__init__(inputPlayerId, "thoma20_nayyar19_hw6")
 
         #whether to do q_learning, or regular old td learning
         self.q_learning = False
 
+        #should we start with the saved weight file, or brand new utilities (equal to state reward)
         self.use_saved_weights = True
+
+        #should we update weights on this run (and output them to the file)
         self.update_weights = False
+
+        #how likely to choose a random move, as opposed to the one with the best utility
+        self.explore_probability = .4
 
         if self.use_saved_weights:
             self.state_action_utility = pickle.load(open("../dict_dump.txt", "rb"))
@@ -54,8 +69,7 @@ class AIPlayer(Player):
 
         self.results_file = open('./results_{}_{}_{}.csv'.format(time.strftime("%Y%m%d-%H%M%S"), ALPHA, GAMMA), 'w')
 
-        self.explore_probability = .4
-
+       #initialize varaibles
         self.previous_state = None
         self.previous_move = None
         self.move_count = 0
@@ -63,7 +77,7 @@ class AIPlayer(Player):
 
         self.current_game_states = []
 
-
+    #whether or not to explore
     def if_exploring(self):
         
         rand_val = random.random()
@@ -73,7 +87,7 @@ class AIPlayer(Player):
 
         return False
 
-
+    #look up the utility of the state (or state,action pair if q_learning)
     def get_utility(self, state_action):
         if self.q_learning:
             state, action = state_action
@@ -84,6 +98,7 @@ class AIPlayer(Player):
             self.state_action_utility[stateCategory(state)] = self.get_reward(state)
         return self.state_action_utility[stateCategory(state)]
 
+    # compute the reward of the given state
     def get_reward(self, state):
         getWin_val = getWinner(state)
         if getWin_val:
@@ -95,6 +110,7 @@ class AIPlayer(Player):
             food_reward = getCurrPlayerInventory(state).foodCount * .01
             return -0.01 + food_reward
 
+    # store the utility of the state (or state,action pair if q_learning)
     def set_utility(self, state_action, value):
         if self.q_learning:
             state, action = state_action
@@ -333,8 +349,9 @@ def cacheValid(state):
     return all(foodCoord in allFood for foodCoord in globalCache.foodCoords) and \
            all(depositCoord in allDeposits for depositCoord in globalCache.depositCoords)
 
-# evaluate the utility of a state from a given player's perspective
-# return a tuple of relevant unweighted components
+
+
+# pull out relevant componets of state (those that make the state "unique")
 def utilityComponents(state, perspective):
     enemy = 1-perspective
 
@@ -402,26 +419,3 @@ def utilityComponents(state, perspective):
     foodScore = state.inventories[perspective].foodCount
 
     return (workerDistScore, foodScore)
-
-def get_current_weight_file():
-    with open('current_weights_file_location.txt', 'r') as file:
-        path = file.read()
-
-    return open(path, 'rb')
-
-def set_current_weight_file(new_path):
-    with open('current_weights_file_location.txt', 'w') as file:
-        file.write(new_path)
-
-'''
-def cloneTest(state):
-    d = {}
-
-    clone1 = state.fastclone()
-    clone2 = state.fastclone()
-
-    d[stateCategory(clone1)] = 1
-    d[stateCategory(clone2)] = 2
-
-    print(d)
-'''
